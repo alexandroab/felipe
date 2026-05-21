@@ -582,108 +582,81 @@ const INVENTARIO_INICIAL = [
 ];
 
 // ══════════════════════════════════════════
-// GIST CONFIG
+// GOOGLE SHEETS CONFIG
 // ══════════════════════════════════════════
-const GIST_TOKEN = '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';
-const GIST_ID    = '74a2855b30895cb506456a404c567e9e';
-const GIST_FILE  = 'data.json';
-let   _db        = null;   // cache en memoria
-let   _saveTimer = null;   // debounce
+const APPS_URL = 'https://script.google.com/macros/s/AKfycbzBQTqwQuCxxmJPYe30PQmlqAVEWd-iQx2D4DBxR8uRU8MaVGXYCU3WnkFhbH5MrT7k/exec';
+let _db       = null;
+let _saveTimer = null;
 
-async function loadGist(){
+async function loadDB(){
   if(_db) return _db;
-  // Método 1: proxy CORS para lectura (más confiable)
   try{
-    const url=encodeURIComponent(`https://api.github.com/gists/${GIST_ID}`);
-    const r=await fetch(`https://corsproxy.io/?${url}&t=${Date.now()}`);
-    if(!r.ok) throw new Error('proxy1 error '+r.status);
-    const data=await r.json();
-    const raw=data.files[GIST_FILE]?.content||'{}';
-    _db=JSON.parse(raw);
-    localStorage.setItem('_gist_cache',JSON.stringify(_db));
-    return _db;
-  }catch(e1){
-    console.warn('loadGist proxy1 failed:',e1);
-  }
-  // Método 2: allorigins
-  try{
-    const url=encodeURIComponent(`https://api.github.com/gists/${GIST_ID}`);
-    const r=await fetch(`https://api.allorigins.win/get?url=${url}&t=${Date.now()}`);
-    if(!r.ok) throw new Error('proxy2 error '+r.status);
-    const j=await r.json();
-    const data=JSON.parse(j.contents);
-    const raw=data.files[GIST_FILE]?.content||'{}';
-    _db=JSON.parse(raw);
-    localStorage.setItem('_gist_cache',JSON.stringify(_db));
-    return _db;
-  }catch(e2){
-    console.warn('loadGist proxy2 failed, using cache:',e2);
-    _db=JSON.parse(localStorage.getItem('_gist_cache')||'{}');
+    const r = await fetch(APPS_URL);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const text = await r.text();
+    _db = JSON.parse(text||'{}');
+    localStorage.setItem('_sheets_cache', JSON.stringify(_db));
+    showSyncBadge('ok');
+  }catch(e){
+    console.warn('loadDB failed, using cache:', e);
+    _db = JSON.parse(localStorage.getItem('_sheets_cache')||'{}');
     showSyncBadge('offline');
   }
   return _db;
 }
 
-async function pushGist(){
+async function pushDB(){
   if(!_db) return;
-  localStorage.setItem('_gist_cache',JSON.stringify(_db));
-  const body=JSON.stringify({files:{[GIST_FILE]:{content:JSON.stringify(_db)}}});
-  // Método 1: corsproxy.io
+  localStorage.setItem('_sheets_cache', JSON.stringify(_db));
   try{
-    const r=await fetch(`https://corsproxy.io/?https://api.github.com/gists/${GIST_ID}`,{
-      method:'PATCH',
-      headers:{Authorization:`token ${GIST_TOKEN}`,Accept:'application/vnd.github.v3+json','Content-Type':'application/json','x-requested-with':'XMLHttpRequest'},
-      body
+    const r = await fetch(APPS_URL, {
+      method: 'POST',
+      body: JSON.stringify(_db)
     });
-    if(!r.ok) throw new Error('push proxy1 error '+r.status);
+    if(!r.ok) throw new Error('HTTP '+r.status);
     showSyncBadge('ok');
-    return;
-  }catch(e1){
-    console.warn('pushGist proxy1 failed:',e1);
+  }catch(e){
+    console.error('pushDB failed:', e);
+    showSyncBadge('error');
   }
-  // Método 2: directo GitHub (puede funcionar si el navegador lo permite)
-  try{
-    const r=await fetch(`https://api.github.com/gists/${GIST_ID}`,{
-      method:'PATCH',
-      headers:{Authorization:`token ${GIST_TOKEN}`,Accept:'application/vnd.github.v3+json','Content-Type':'application/json'},
-      body
-    });
-    if(!r.ok) throw new Error('push direct error '+r.status);
-    showSyncBadge('ok');
-    return;
-  }catch(e2){
-    console.warn('pushGist direct failed:',e2);
-  }
-  // Si todo falla, los datos están en localStorage como respaldo
-  showSyncBadge('error');
-  toast('Datos guardados localmente. Verifique su conexión.','err');
 }
 
 function scheduleSave(){
+  showSyncBadge('saving');
   clearTimeout(_saveTimer);
-  _saveTimer=setTimeout(pushGist,1200);
+  _saveTimer = setTimeout(pushDB, 1500);
 }
 
 function showSyncBadge(estado){
-  let b=document.getElementById('sync-badge');
-  if(!b){b=document.createElement('div');b.id='sync-badge';
-    b.style.cssText='position:fixed;top:14px;right:16px;padding:4px 12px;border-radius:20px;font-size:.78rem;font-weight:700;z-index:9999;transition:all .3s;';
-    document.body.appendChild(b);}
-  if(estado==='ok'){b.textContent='☁️ Sincronizado';b.style.background='#d4edda';b.style.color='#155724';}
-  else if(estado==='saving'){b.textContent='⏳ Guardando...';b.style.background='#fff3cd';b.style.color='#856404';}
-  else if(estado==='offline'){b.textContent='⚠️ Sin conexión';b.style.background='#f8d7da';b.style.color='#721c24';}
-  else{b.textContent='❌ Error sync';b.style.background='#f8d7da';b.style.color='#721c24';}
+  let b = document.getElementById('sync-badge');
+  if(!b){
+    b = document.createElement('div');
+    b.id = 'sync-badge';
+    b.style.cssText = 'position:fixed;top:14px;right:16px;padding:4px 14px;border-radius:20px;font-size:.78rem;font-weight:700;z-index:9999;transition:all .3s;pointer-events:none;';
+    document.body.appendChild(b);
+  }
+  const map = {
+    ok:      ['☁️ Sincronizado', '#d4edda', '#155724'],
+    saving:  ['⏳ Guardando...', '#fff3cd', '#856404'],
+    offline: ['⚠️ Sin conexión', '#f8d7da', '#721c24'],
+    error:   ['❌ Error al guardar', '#f8d7da', '#721c24'],
+  };
+  const [txt, bg, color] = map[estado]||map.error;
+  b.textContent = txt;
+  b.style.background = bg;
+  b.style.color = color;
 }
 
 function showLoadingOverlay(show){
-  let o=document.getElementById('loading-overlay');
+  let o = document.getElementById('loading-overlay');
   if(!o){
-    o=document.createElement('div');o.id='loading-overlay';
-    o.style.cssText='position:fixed;inset:0;background:rgba(255,255,255,.85);z-index:9998;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;';
-    o.innerHTML=`<div style="font-size:2.5rem">☁️</div><div style="font-family:Barlow Condensed,sans-serif;font-size:1.4rem;font-weight:700;color:#1a2a5e">Cargando datos desde la nube...</div>`;
+    o = document.createElement('div');
+    o.id = 'loading-overlay';
+    o.style.cssText = 'position:fixed;inset:0;background:rgba(255,255,255,.9);z-index:9998;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;';
+    o.innerHTML = `<div style="font-size:3rem">☁️</div><div style="font-family:Barlow Condensed,sans-serif;font-size:1.5rem;font-weight:800;color:#1a2a5e">Cargando datos desde la nube...</div><div style="font-size:.9rem;color:#666">Conectando con Google Sheets</div>`;
     document.body.appendChild(o);
   }
-  o.style.display=show?'flex':'none';
+  o.style.display = show ? 'flex' : 'none';
 }
 
 // ══════════════════════════════════════════
@@ -1051,7 +1024,7 @@ async function init(){
   horas.forEach(id=>{const el=document.getElementById(id);if(el)el.value=new Date().toTimeString().substring(0,5);});
   // Cargar datos desde Gist
   showLoadingOverlay(true);
-  await loadGist();
+  await loadDB();
   showLoadingOverlay(false);
   initInventario();
   renderContactos();
