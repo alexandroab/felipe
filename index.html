@@ -228,7 +228,14 @@ tr:hover td{background:#e3ecd6;}
   <div class="card">
     <div class="card-header">
       <h3>Agregar / Editar Equipo</h3>
-      <button class="btn btn-sm btn-secondary" onclick="limpiarFormInv()">🔄 Nuevo</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-sm btn-secondary" onclick="limpiarFormInv()">🔄 Nuevo</button>
+        <label class="btn btn-sm btn-info" style="cursor:pointer;margin:0;" title="Cargar inventario desde CSV">
+          📂 Cargar CSV
+          <input type="file" id="csv-file-input" accept=".csv" style="display:none;" onchange="importarCSV(this)">
+        </label>
+        <button class="btn btn-sm" style="background:#8e44ad;color:#fff;" onclick="confirmarLimpiarInventario()" title="Borrar todo el inventario y empezar de cero">🗑️ Limpiar todo</button>
+      </div>
     </div>
     <div class="form-grid">
       <div><label>Descripción *</label><input id="inv-desc" placeholder="Ej: LAPTOP HP"></div>
@@ -1031,6 +1038,95 @@ async function init(){
   showSyncBadge('ok');
 }
 init();
+
+// ══════════════════════════════════════════
+// IMPORTAR INVENTARIO DESDE CSV
+// ══════════════════════════════════════════
+function importarCSV(input){
+  const file = input.files[0];
+  if(!file){ return; }
+  const reader = new FileReader();
+  reader.onload = function(e){
+    const text = e.target.result;
+    const lines = text.split('\n').filter(l => l.trim());
+    if(lines.length < 2){ toast('El archivo CSV está vacío','err'); return; }
+    const sep = lines[0].includes(';') ? ';' : ',';
+    const header = parseCSVLine(lines[0], sep).map(h => h.trim().toUpperCase().replace(/[^A-Z0-9]/g,'_'));
+    const colMap = {
+      desc:     findCol(header, ['DESCRIPCION','DESC','DESCRIPTION','EQUIPO']),
+      marca:    findCol(header, ['MARCA','BRAND','FABRICANTE']),
+      modelo:   findCol(header, ['MODELO','MODEL']),
+      serial:   findCol(header, ['SERIAL','SERIE','SN']),
+      activo:   findCol(header, ['ACTIVO_MINER','ACTIVO','NO_ACTIVO']),
+      depto:    findCol(header, ['DEPARTAMENTO','DEPTO','UBICACION','AREA']),
+      estado:   findCol(header, ['ESTADO','STATUS']),
+      cantidad: findCol(header, ['CANTIDAD','QTY','QUANTITY','CANT']),
+    };
+    if(colMap.desc === -1){ toast('No se encontró columna DESCRIPCION en el CSV','err'); return; }
+    const equipos = [];
+    for(let i = 1; i < lines.length; i++){
+      const cols = parseCSVLine(lines[i], sep);
+      if(!cols.length || cols.every(c => !c.trim())) continue;
+      const desc = (cols[colMap.desc]||'').trim();
+      if(!desc) continue;
+      equipos.push({
+        id: uid(), fechaReg: hoy(), desc,
+        marca:    colMap.marca    >= 0 ? (cols[colMap.marca]   ||'').trim() : '',
+        modelo:   colMap.modelo   >= 0 ? (cols[colMap.modelo]  ||'').trim() : '',
+        serial:   colMap.serial   >= 0 ? (cols[colMap.serial]  ||'').trim() : '',
+        activo:   colMap.activo   >= 0 ? (cols[colMap.activo]  ||'').trim() : '',
+        depto:    colMap.depto    >= 0 ? (cols[colMap.depto]   ||'').trim() : '',
+        estado:   colMap.estado   >= 0 ? normalizarEstado((cols[colMap.estado]||'').trim()) : 'EN USO',
+        cantidad: colMap.cantidad >= 0 ? (parseInt(cols[colMap.cantidad])||1) : 1,
+      });
+    }
+    if(!equipos.length){ toast('No se encontraron equipos válidos','err'); return; }
+    const existentes = load('equipos',[]);
+    const ok = confirm(
+      'Se encontraron ' + equipos.length + ' equipos en el CSV.\n' +
+      'Ya tienes ' + existentes.length + ' equipos en el sistema.\n\n' +
+      'OK = AGREGAR al inventario existente\nCancelar = Cancelar operación'
+    );
+    if(!ok){ input.value=''; return; }
+    save('equipos', [...existentes, ...equipos]);
+    renderInventario(); renderStats();
+    toast('✅ ' + equipos.length + ' equipos importados');
+    input.value = '';
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function confirmarLimpiarInventario(){
+  if(!confirm('⚠️ ¿Borrar TODO el inventario? Esta acción no se puede deshacer.')) return;
+  if(!confirm('Segunda confirmación: ¿Borrar todo el inventario?')) return;
+  save('equipos',[]); renderInventario(); renderStats();
+  toast('Inventario limpiado');
+}
+
+function parseCSVLine(line, sep){
+  const result=[]; let cur=''; let inQ=false;
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(ch==='"'){ if(inQ&&line[i+1]==='"'){cur+='"';i++;}else{inQ=!inQ;} }
+    else if(ch===sep&&!inQ){result.push(cur);cur='';}
+    else{cur+=ch;}
+  }
+  result.push(cur); return result;
+}
+
+function findCol(header, names){
+  for(const n of names){ const i=header.indexOf(n); if(i>=0) return i; }
+  return -1;
+}
+
+function normalizarEstado(e){
+  const u=e.toUpperCase();
+  if(u.includes('REPARAC')) return 'EN REPARACION';
+  if(u.includes('DA') && u.includes('ADO')) return 'DAÑADO';
+  if(u.includes('ALMAC')) return 'ALMACEN';
+  if(u.includes('BAJA')) return 'BAJA';
+  return 'EN USO';
+}
 </script>
 </body>
 </html>
