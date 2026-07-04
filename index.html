@@ -195,6 +195,7 @@ tr:hover td{background:#e3ecd6;}
     <div class="btn-row">
       <button class="btn btn-primary" onclick="guardarContacto()">➕ Guardar Contacto</button>
       <button class="btn btn-secondary" onclick="exportarContactos()">📥 Exportar CSV</button>
+      <button class="btn btn-primary" onclick="exportarAgendaPDF()" style="background:#c0392b;">🖨️ Exportar PDF</button>
     </div>
   </div>
 
@@ -306,8 +307,26 @@ tr:hover td{background:#e3ecd6;}
     <button class="tab" onclick="filtrarEstadoInv('ALMACEN',this)">Almacén</button>
   </div>
 
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <label style="font-size:.85rem;font-weight:600;color:var(--text-soft);">Mostrar:</label>
+      <select id="inv-per-page" onchange="invPage=1;renderInventario()" style="padding:5px 10px;border-radius:6px;border:1.5px solid var(--border);font-size:.85rem;width:auto;">
+        <option value="50">50 por página</option>
+        <option value="100">100 por página</option>
+        <option value="200">200 por página</option>
+        <option value="9999">Todos</option>
+      </select>
+    </div>
+    <div id="inv-pagination-info" style="font-size:.83rem;color:var(--text-soft);"></div>
+    <div style="display:flex;gap:6px;">
+      <button class="btn btn-sm btn-secondary" onclick="exportarInventarioPDF()" style="background:#c0392b;color:#fff;">🖨️ PDF</button>
+      <button class="btn btn-sm btn-secondary" onclick="exportarInventarioCSV()">📥 CSV</button>
+      <button class="btn btn-sm" style="background:var(--azul);color:#fff;" id="inv-prev" onclick="cambiarPagina(-1)">← Ant</button>
+      <button class="btn btn-sm" style="background:var(--azul);color:#fff;" id="inv-next" onclick="cambiarPagina(1)">Sig →</button>
+    </div>
+  </div>
   <div class="card" style="padding:0">
-    <div class="table-wrap">
+    <div class="table-wrap" style="max-height:600px;overflow-y:auto;">
       <table>
         <thead><tr>
           <th>#</th><th>Descripción</th><th>Marca/Modelo</th><th>Serial</th><th>Activo</th><th>Ubicación</th><th>Estado</th><th>Acciones</th>
@@ -316,6 +335,7 @@ tr:hover td{background:#e3ecd6;}
       </table>
     </div>
   </div>
+  <div id="inv-pagination-bottom" style="display:flex;justify-content:center;gap:8px;margin-top:8px;flex-wrap:wrap;"></div>
 
   <div class="card">
     <div class="card-header"><h3>🔧 Historial de Mantenimientos</h3></div>
@@ -377,6 +397,7 @@ tr:hover td{background:#e3ecd6;}
     <div class="btn-row">
       <button class="btn btn-primary" onclick="guardarAsistencia()">💾 Registrar Asistencia</button>
       <button class="btn btn-secondary" onclick="exportarAsistencia()">📥 Exportar CSV</button>
+      <button class="btn btn-primary" onclick="exportarAsistenciaWord()" style="background:#2448a0;">📄 Exportar Word</button>
     </div>
   </div>
 
@@ -446,6 +467,7 @@ tr:hover td{background:#e3ecd6;}
     <div class="btn-row">
       <button class="btn btn-primary" onclick="guardarVisita()">💾 Registrar Visita</button>
       <button class="btn btn-secondary" onclick="exportarVisitas()">📥 Exportar CSV</button>
+      <button class="btn btn-primary" onclick="exportarVisitasWord()" style="background:#2448a0;">📄 Exportar Word</button>
     </div>
   </div>
 
@@ -789,6 +811,69 @@ function exportarContactos(){
   const csv='Nombre,Tipo,Teléfono,Email,Cargo,Notas,Fecha\n'+cs.map(c=>`"${c.nombre}","${c.tipo}","${c.tel}","${c.email}","${c.cargo}","${c.notas}","${c.fecha}"`).join('\n');
   dlCSV(csv,'contactos.csv');
 }
+
+function exportarAgendaPDF(){
+  const cs = load('contactos',[]);
+  if(!cs.length){toast('No hay contactos para exportar','err');return;}
+  const tipoLabel={docente:'Docente',estudiante:'Estudiante',administrativo:'Administrativo',apoyo:'Personal de Apoyo',externo:'Externo'};
+  const colores={docente:'#2448a0',estudiante:'#4a6b1a',administrativo:'#b89a00',apoyo:'#8e44ad',externo:'#e67e22'};
+  // Group by type
+  const grupos={docente:[],estudiante:[],administrativo:[],apoyo:[],externo:[]};
+  cs.forEach(c=>(grupos[c.tipo]||(grupos.externo)).push(c));
+  let filas = '';
+  cs.forEach((c,i) => {
+    const color = colores[c.tipo]||'#444';
+    filas += `<tr style="page-break-inside:avoid">
+      <td style="padding:6px 8px;border-bottom:1px solid #e0e0e0;font-weight:600">${c.nombre}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e0e0e0;"><span style="background:${color};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">${tipoLabel[c.tipo]||c.tipo}</span></td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e0e0e0">${c.cargo||'-'}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e0e0e0">${c.tel||'-'}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e0e0e0">${c.email||'-'}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e0e0e0;font-size:11px;color:#666">${c.notas||''}</td>
+    </tr>`;
+  });
+  const w = window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Agenda de Contactos</title>
+  <style>
+    body{font-family:Arial,sans-serif;margin:0;padding:20px;color:#222;}
+    @media print{.no-print{display:none}body{padding:10px}}
+    h1{color:#1a2a5e;font-size:20px;margin:0}
+    .header{background:linear-gradient(135deg,#1a2a5e,#4a6b1a);color:#fff;padding:16px 20px;border-radius:8px;margin-bottom:20px;display:flex;align-items:center;gap:16px;}
+    .header-text p{margin:4px 0;font-size:12px;opacity:.85}
+    table{width:100%;border-collapse:collapse;font-size:12px;}
+    th{background:#1a2a5e;color:#fff;padding:8px;text-align:left;font-size:12px;}
+    tr:nth-child(even) td{background:#f5f7f2}
+    .stats{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
+    .stat{background:#f0f4e8;border-left:4px solid #4a6b1a;padding:8px 14px;border-radius:4px;font-size:12px;}
+    .stat strong{font-size:18px;display:block;color:#1a2a5e;}
+    .btn-print{background:#1a2a5e;color:#fff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:14px;margin-bottom:16px;}
+  </style></head><body>
+  <div class="header">
+    <div class="header-text">
+      <h1>📋 AGENDA DE CONTACTOS</h1>
+      <p>Politécnico Felipe Soriano Bello · Constanza, R.D.</p>
+      <p>Generado: ${new Date().toLocaleDateString('es-DO',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</p>
+    </div>
+  </div>
+  <div class="stats">
+    <div class="stat"><strong>${cs.length}</strong>Total Contactos</div>
+    <div class="stat"><strong>${cs.filter(c=>c.tipo==='docente').length}</strong>Docentes</div>
+    <div class="stat"><strong>${cs.filter(c=>c.tipo==='estudiante').length}</strong>Estudiantes</div>
+    <div class="stat"><strong>${cs.filter(c=>c.tipo==='administrativo').length}</strong>Administrativos</div>
+    <div class="stat"><strong>${cs.filter(c=>c.tipo==='apoyo'||c.tipo==='externo').length}</strong>Apoyo/Externos</div>
+  </div>
+  <button class="btn-print no-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+  <table>
+    <thead><tr><th>Nombre</th><th>Tipo</th><th>Cargo</th><th>Teléfono</th><th>Correo</th><th>Notas</th></tr></thead>
+    <tbody>${filas}</tbody>
+  </table>
+  <div style="margin-top:20px;font-size:11px;color:#999;text-align:center">
+    Preparado por el Dinamizador TIC · Politécnico Felipe Soriano Bello
+  </div>
+  </body></html>`);
+  w.document.close();
+}
 function dlCSV(csv,fname){
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download=fname;a.click();
 }
@@ -832,14 +917,24 @@ function eliminarEquipo(id){
 }
 function filtrarInventario(){invBusq=document.getElementById('inv-buscar').value.toLowerCase();renderInventario();}
 function filtrarEstadoInv(e,btn){invFiltroEstado=e;document.querySelectorAll('#sec-inventario .tabs .tab').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderInventario();}
+let invPage = 1;
 function renderInventario(){
-  const es=load('equipos',[]);
-  let fil=es.filter(e=>(invFiltroEstado==='todos'||e.estado===invFiltroEstado)&&(!invBusq||(e.desc+e.marca+e.modelo+e.serial+e.depto+e.activo).toLowerCase().includes(invBusq)));
-  const tb=document.getElementById('inv-tbody');
-  if(!fil.length){tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:#888">No hay equipos con estos filtros</td></tr>';return;}
-  tb.innerHTML=fil.map((e,i)=>`
+  const es = load('equipos',[]);
+  let fil = es.filter(e=>(invFiltroEstado==='todos'||e.estado===invFiltroEstado)&&(!invBusq||(e.desc+e.marca+e.modelo+e.serial+e.depto+e.activo).toLowerCase().includes(invBusq)));
+  const perPage = parseInt(document.getElementById('inv-per-page')?.value||50);
+  const totalPages = Math.max(1, Math.ceil(fil.length/perPage));
+  if(invPage > totalPages) invPage = totalPages;
+  const start = (invPage-1)*perPage;
+  const paginated = fil.slice(start, start+perPage);
+  const tb = document.getElementById('inv-tbody');
+  if(!fil.length){tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:#888">No hay equipos con estos filtros</td></tr>';
+    document.getElementById('inv-pagination-info').textContent='';
+    document.getElementById('inv-pagination-bottom').innerHTML='';
+    return;
+  }
+  tb.innerHTML = paginated.map((e,i)=>`
     <tr>
-      <td>${i+1}</td>
+      <td>${start+i+1}</td>
       <td><strong>${e.desc}</strong></td>
       <td>${e.marca||''} ${e.modelo||''}</td>
       <td style="font-size:.78rem;font-family:monospace">${e.serial||'-'}</td>
@@ -855,7 +950,27 @@ function renderInventario(){
       </td>
     </tr>
   `).join('');
+  // Pagination info
+  const info = document.getElementById('inv-pagination-info');
+  if(info) info.textContent = `Mostrando ${start+1}–${Math.min(start+perPage,fil.length)} de ${fil.length} equipos`;
+  // Pagination buttons bottom
+  const bot = document.getElementById('inv-pagination-bottom');
+  if(bot){
+    let btns = '';
+    for(let p=1;p<=totalPages;p++){
+      btns += `<button class="btn btn-sm" style="min-width:36px;${p===invPage?'background:var(--azul-oscuro);color:#fff;':'background:var(--bg-card);'}" onclick="invPage=${p};renderInventario()">${p}</button>`;
+    }
+    bot.innerHTML = totalPages > 1 ? btns : '';
+  }
   renderStats();
+}
+function cambiarPagina(dir){
+  const es = load('equipos',[]);
+  let fil = es.filter(e=>(invFiltroEstado==='todos'||e.estado===invFiltroEstado)&&(!invBusq||(e.desc+e.marca+e.modelo+e.serial+e.depto+e.activo).toLowerCase().includes(invBusq)));
+  const perPage = parseInt(document.getElementById('inv-per-page')?.value||50);
+  const totalPages = Math.max(1,Math.ceil(fil.length/perPage));
+  invPage = Math.min(Math.max(1,invPage+dir),totalPages);
+  renderInventario();
 }
 function renderStats(){
   const es=load('equipos',[]);
@@ -1126,6 +1241,265 @@ function normalizarEstado(e){
   if(u.includes('ALMAC')) return 'ALMACEN';
   if(u.includes('BAJA')) return 'BAJA';
   return 'EN USO';
+}
+
+// ══════════════════════════════════════════
+// INVENTARIO: EXPORTAR PDF + CSV
+// ══════════════════════════════════════════
+function exportarInventarioCSV(){
+  const es = load('equipos',[]);
+  const csv = 'N,Descripción,Marca,Modelo,Serial,Activo MINER,Departamento,Estado,Cantidad\n'
+    + es.map((e,i)=>`${i+1},"${e.desc}","${e.marca||''}","${e.modelo||''}","${e.serial||''}","${e.activo||''}","${e.depto||''}","${e.estado}",${e.cantidad||1}`).join('\n');
+  dlCSV(csv,'inventario_politecnico.csv');
+}
+
+function exportarInventarioPDF(){
+  const es = load('equipos',[]);
+  if(!es.length){toast('No hay equipos en el inventario','err');return;}
+  const estadoColor={'EN USO':'#155724','EN REPARACION':'#856404','DAÑADO':'#721c24','ALMACEN':'#004085','BAJA':'#666'};
+  const estadoBg={'EN USO':'#d4edda','EN REPARACION':'#fff3cd','DAÑADO':'#f8d7da','ALMACEN':'#cce5ff','BAJA':'#f0f0f0'};
+  const filas = es.map((e,i)=>`<tr>
+    <td style="padding:5px 6px;border-bottom:1px solid #e0e0e0;text-align:center">${i+1}</td>
+    <td style="padding:5px 6px;border-bottom:1px solid #e0e0e0;font-weight:600">${e.desc}</td>
+    <td style="padding:5px 6px;border-bottom:1px solid #e0e0e0">${e.marca||''}</td>
+    <td style="padding:5px 6px;border-bottom:1px solid #e0e0e0">${e.modelo||''}</td>
+    <td style="padding:5px 6px;border-bottom:1px solid #e0e0e0;font-family:monospace;font-size:10px">${e.serial||'-'}</td>
+    <td style="padding:5px 6px;border-bottom:1px solid #e0e0e0">${e.activo||'-'}</td>
+    <td style="padding:5px 6px;border-bottom:1px solid #e0e0e0">${e.depto||'-'}</td>
+    <td style="padding:5px 6px;border-bottom:1px solid #e0e0e0;text-align:center">${e.cantidad||1}</td>
+    <td style="padding:5px 6px;border-bottom:1px solid #e0e0e0">
+      <span style="background:${estadoBg[e.estado]||'#eee'};color:${estadoColor[e.estado]||'#333'};padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700">${e.estado}</span>
+    </td>
+  </tr>`).join('');
+  const stats = {total:0,'EN USO':0,'EN REPARACION':0,'DAÑADO':0,'ALMACEN':0};
+  es.forEach(e=>{stats.total+=(e.cantidad||1);stats[e.estado]=(stats[e.estado]||0)+(e.cantidad||1);});
+  const w = window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Inventario Tecnológico</title>
+  <style>
+    body{font-family:Arial,sans-serif;margin:0;padding:16px;font-size:11px;color:#222;}
+    @page{size:landscape;margin:1cm}
+    @media print{.no-print{display:none}body{padding:0}}
+    .header{background:linear-gradient(135deg,#1a2a5e,#4a6b1a);color:#fff;padding:14px 20px;border-radius:8px;margin-bottom:14px;}
+    .header h1{margin:0;font-size:18px;}
+    .header p{margin:3px 0;font-size:11px;opacity:.85}
+    .stats{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+    .stat{background:#f0f4e8;border-left:4px solid #4a6b1a;padding:6px 12px;border-radius:4px;}
+    .stat strong{font-size:16px;display:block;color:#1a2a5e;}
+    table{width:100%;border-collapse:collapse;font-size:10px;}
+    th{background:#1a2a5e;color:#fff;padding:6px;text-align:left;position:sticky;top:0;}
+    tr:nth-child(even) td{background:#f5f7f2}
+    .btn-print{background:#1a2a5e;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px;margin-bottom:12px;}
+    .footer{margin-top:14px;font-size:10px;color:#999;text-align:center;border-top:1px solid #eee;padding-top:8px;}
+  </style></head><body>
+  <div class="header">
+    <h1>💻 INVENTARIO DE EQUIPOS TECNOLÓGICOS</h1>
+    <p>Politécnico Felipe Soriano Bello · Constanza, R.D.</p>
+    <p>Preparado por: Alexandro Antonio Báez De Los Santos · Dinamizador TIC</p>
+    <p>Fecha: ${new Date().toLocaleDateString('es-DO',{year:'numeric',month:'long',day:'numeric'})}</p>
+  </div>
+  <div class="stats">
+    <div class="stat"><strong>${stats.total}</strong>Total Unidades</div>
+    <div class="stat"><strong>${stats['EN USO']||0}</strong>En Uso</div>
+    <div class="stat"><strong>${stats['EN REPARACION']||0}</strong>En Reparación</div>
+    <div class="stat"><strong>${stats['DAÑADO']||0}</strong>Dañados</div>
+    <div class="stat"><strong>${stats['ALMACEN']||0}</strong>Almacén</div>
+    <div class="stat"><strong>${es.length}</strong>Registros</div>
+  </div>
+  <button class="btn-print no-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+  <table>
+    <thead><tr>
+      <th style="width:35px">#</th>
+      <th>Descripción</th><th>Marca</th><th>Modelo</th>
+      <th>Serial</th><th>Activo MINER</th><th>Departamento</th>
+      <th style="width:40px">Cant.</th><th>Estado</th>
+    </tr></thead>
+    <tbody>${filas}</tbody>
+  </table>
+  <div class="footer">Politécnico Felipe Soriano Bello · Dinamizador TIC · Total: ${es.length} registros</div>
+  </body></html>`);
+  w.document.close();
+}
+
+// ══════════════════════════════════════════
+// ASISTENCIA: EXPORTAR WORD (HTML→DOC)
+// ══════════════════════════════════════════
+function exportarAsistenciaWord(){
+  const as = load('asistencias',[]);
+  if(!as.length){toast('No hay registros de asistencia','err');return;}
+  const sorted = [...as].sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  const tipoColor={Resuelto:'#155724',Pendiente:'#721c24','En Proceso':'#856404',Derivado:'#004085'};
+  const tipoBg={Resuelto:'#d4edda',Pendiente:'#f8d7da','En Proceso':'#fff3cd',Derivado:'#cce5ff'};
+  const usuarioColor={Docente:'#1a2a5e',Estudiante:'#4a6b1a',Administrativo:'#b89a00','Personal de Apoyo':'#8e44ad'};
+
+  const filas = sorted.map((a,i)=>`
+    <tr style="page-break-inside:avoid">
+      <td style="padding:7px 8px;border:1px solid #d0d0d0;text-align:center;font-weight:700;color:#1a2a5e">${i+1}</td>
+      <td style="padding:7px 8px;border:1px solid #d0d0d0">${fmt(a.fecha)}</td>
+      <td style="padding:7px 8px;border:1px solid #d0d0d0">${a.hora||'-'}</td>
+      <td style="padding:7px 8px;border:1px solid #d0d0d0;font-weight:600">${a.nombre}</td>
+      <td style="padding:7px 8px;border:1px solid #d0d0d0"><span style="color:${usuarioColor[a.tipoUsuario]||'#333'};font-weight:700">${a.tipoUsuario}</span></td>
+      <td style="padding:7px 8px;border:1px solid #d0d0d0">${a.tipo}</td>
+      <td style="padding:7px 8px;border:1px solid #d0d0d0">${a.equipo||'-'}</td>
+      <td style="padding:7px 8px;border:1px solid #d0d0d0;font-size:11px">${a.desc||'-'}</td>
+      <td style="padding:7px 8px;border:1px solid #d0d0d0;text-align:center">
+        <span style="background:${tipoBg[a.estado]||'#eee'};color:${tipoColor[a.estado]||'#333'};padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700">${a.estado}</span>
+      </td>
+    </tr>`).join('');
+
+  const cnt={Docente:0,Estudiante:0,Administrativo:0,'Personal de Apoyo':0};
+  as.forEach(a=>cnt[a.tipoUsuario]=(cnt[a.tipoUsuario]||0)+1);
+
+  const docContent = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
+    xmlns:w="urn:schemas-microsoft-com:office:word"
+    xmlns="http://www.w3.org/TR/REC-html40">
+  <head><meta charset="UTF-8">
+  <style>
+    body{font-family:Arial,sans-serif;font-size:11pt;margin:2cm;}
+    h1{color:#1a2a5e;font-size:16pt;margin-bottom:4pt;}
+    h2{color:#4a6b1a;font-size:12pt;margin-bottom:6pt;border-bottom:2px solid #4a6b1a;padding-bottom:4pt;}
+    .header-box{background:#1a2a5e;color:white;padding:14pt;margin-bottom:14pt;}
+    .header-box p{margin:3pt 0;font-size:10pt;}
+    table{width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:16pt;}
+    th{background:#1a2a5e;color:white;padding:6pt 8pt;text-align:left;font-size:9pt;}
+    tr:nth-child(even) td{background:#f5f7f2;}
+    .stats-table td{padding:8pt 12pt;border:1px solid #ddd;}
+    .stats-table td strong{font-size:18pt;display:block;color:#1a2a5e;}
+    .footer{font-size:9pt;color:#888;text-align:center;border-top:1px solid #ddd;margin-top:16pt;padding-top:8pt;}
+  </style></head><body>
+  <div class="header-box">
+    <h1 style="color:white;margin:0 0 6pt">📋 REGISTRO DE ASISTENCIA TECNOLÓGICA</h1>
+    <p>Politécnico Felipe Soriano Bello · Constanza, R.D.</p>
+    <p>Dinamizador TIC: Alexandro Antonio Báez De Los Santos</p>
+    <p>Fecha de generación: ${new Date().toLocaleDateString('es-DO',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</p>
+    <p>Total de registros: ${as.length}</p>
+  </div>
+
+  <h2>Resumen Estadístico</h2>
+  <table class="stats-table">
+    <tr>
+      <td><strong>${as.length}</strong>Total Asistencias</td>
+      <td><strong>${cnt.Docente||0}</strong>Docentes</td>
+      <td><strong>${cnt.Estudiante||0}</strong>Estudiantes</td>
+      <td><strong>${cnt.Administrativo||0}</strong>Administrativos</td>
+      <td><strong>${cnt['Personal de Apoyo']||0}</strong>Personal de Apoyo</td>
+      <td><strong>${as.filter(a=>a.estado==='Resuelto').length}</strong>Resueltos</td>
+    </tr>
+  </table>
+
+  <h2>Detalle de Asistencias</h2>
+  <table>
+    <thead><tr>
+      <th>#</th><th>Fecha</th><th>Hora</th><th>Beneficiario</th>
+      <th>Tipo Usuario</th><th>Tipo Asistencia</th><th>Equipo</th>
+      <th>Descripción</th><th>Estado</th>
+    </tr></thead>
+    <tbody>${filas}</tbody>
+  </table>
+  <div class="footer">
+    Politécnico Felipe Soriano Bello · Dinamizador TIC · ${new Date().getFullYear()}
+  </div>
+  </body></html>`;
+
+  const blob = new Blob([docContent], {type:'application/msword'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'Registro_Asistencia_TIC_' + hoy() + '.doc';
+  a.click();
+  toast('✅ Archivo Word generado');
+}
+
+// ══════════════════════════════════════════
+// VISITAS: EXPORTAR WORD (HTML→DOC)
+// ══════════════════════════════════════════
+function exportarVisitasWord(){
+  const vs = load('visitas',[]);
+  if(!vs.length){toast('No hay visitas registradas','err');return;}
+  const sorted = [...vs].sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  const misVis = vs.filter(v=>v.tipo==='Acompañamiento a Docente');
+  const recibidas = vs.filter(v=>v.tipo==='Visita de Superior');
+
+  const renderGrupo = (lista, titulo, color) => {
+    if(!lista.length) return '';
+    const filas = lista.map((v,i)=>`
+      <tr style="page-break-inside:avoid">
+        <td style="padding:7px 8px;border:1px solid #d0d0d0;text-align:center;font-weight:700">${i+1}</td>
+        <td style="padding:7px 8px;border:1px solid #d0d0d0">${fmt(v.fecha)}</td>
+        <td style="padding:7px 8px;border:1px solid #d0d0d0">${v.hora||'-'}</td>
+        <td style="padding:7px 8px;border:1px solid #d0d0d0;font-weight:600">${v.persona}</td>
+        <td style="padding:7px 8px;border:1px solid #d0d0d0">${v.asignatura||'-'}</td>
+        <td style="padding:7px 8px;border:1px solid #d0d0d0">${v.aula||'-'}</td>
+        <td style="padding:7px 8px;border:1px solid #d0d0d0;text-align:center">${v.duracion||'-'} min</td>
+        <td style="padding:7px 8px;border:1px solid #d0d0d0">${v.proposito||'-'}</td>
+        <td style="padding:7px 8px;border:1px solid #d0d0d0;font-size:10px">${v.obs||'-'}</td>
+        <td style="padding:7px 8px;border:1px solid #d0d0d0;font-size:10px;color:#4a6b1a">${v.compromisos||'-'}</td>
+      </tr>`).join('');
+    return `<h2 style="color:${color};font-size:13pt;border-bottom:2px solid ${color};padding-bottom:4pt;margin-top:20pt">${titulo} (${lista.length})</h2>
+    <table width="100%" style="border-collapse:collapse;font-size:9pt;margin-bottom:16pt;">
+      <thead><tr style="background:${color}">
+        <th style="padding:6pt 8pt;color:white;text-align:left">#</th>
+        <th style="padding:6pt 8pt;color:white;text-align:left">Fecha</th>
+        <th style="padding:6pt 8pt;color:white;text-align:left">Hora</th>
+        <th style="padding:6pt 8pt;color:white;text-align:left">Docente/Superior</th>
+        <th style="padding:6pt 8pt;color:white;text-align:left">Asignatura</th>
+        <th style="padding:6pt 8pt;color:white;text-align:left">Aula</th>
+        <th style="padding:6pt 8pt;color:white;text-align:left">Duración</th>
+        <th style="padding:6pt 8pt;color:white;text-align:left">Propósito</th>
+        <th style="padding:6pt 8pt;color:white;text-align:left">Observaciones</th>
+        <th style="padding:6pt 8pt;color:white;text-align:left">Compromisos</th>
+      </tr></thead>
+      <tbody>${filas}</tbody>
+    </table>`;
+  };
+
+  const docContent = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
+    xmlns:w="urn:schemas-microsoft-com:office:word"
+    xmlns="http://www.w3.org/TR/REC-html40">
+  <head><meta charset="UTF-8">
+  <style>
+    body{font-family:Arial,sans-serif;font-size:11pt;margin:2cm;}
+    tr:nth-child(even) td{background:#f5f7f2;}
+    .footer{font-size:9pt;color:#888;text-align:center;border-top:1px solid #ddd;margin-top:16pt;padding-top:8pt;}
+  </style></head><body>
+  <div style="background:#1a2a5e;color:white;padding:14pt;margin-bottom:14pt;">
+    <h1 style="color:white;margin:0 0 6pt;font-size:16pt;">🏫 REGISTRO DE VISITAS DE ACOMPAÑAMIENTO</h1>
+    <p style="margin:3pt 0;font-size:10pt;">Politécnico Felipe Soriano Bello · Constanza, R.D.</p>
+    <p style="margin:3pt 0;font-size:10pt;">Dinamizador TIC: Alexandro Antonio Báez De Los Santos</p>
+    <p style="margin:3pt 0;font-size:10pt;">Fecha de generación: ${new Date().toLocaleDateString('es-DO',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</p>
+    <p style="margin:3pt 0;font-size:10pt;">Total de visitas: ${vs.length} (Mis visitas: ${misVis.length} | Recibidas: ${recibidas.length})</p>
+  </div>
+
+  <table width="100%" style="border-collapse:collapse;font-size:10pt;margin-bottom:16pt;">
+    <tr>
+      <td style="padding:8pt 12pt;border:1px solid #ddd;text-align:center">
+        <span style="font-size:20pt;font-weight:bold;color:#1a2a5e;display:block">${vs.length}</span>Total Visitas
+      </td>
+      <td style="padding:8pt 12pt;border:1px solid #ddd;text-align:center">
+        <span style="font-size:20pt;font-weight:bold;color:#4a6b1a;display:block">${misVis.length}</span>Acompañamientos
+      </td>
+      <td style="padding:8pt 12pt;border:1px solid #ddd;text-align:center">
+        <span style="font-size:20pt;font-weight:bold;color:#b89a00;display:block">${recibidas.length}</span>Visitas Recibidas
+      </td>
+      <td style="padding:8pt 12pt;border:1px solid #ddd;text-align:center">
+        <span style="font-size:20pt;font-weight:bold;color:#8e44ad;display:block">${[...new Set(vs.map(v=>v.persona))].length}</span>Personas Distintas
+      </td>
+    </tr>
+  </table>
+
+  ${renderGrupo(misVis,'🎓 Visitas de Acompañamiento a Docentes','#4a6b1a')}
+  ${renderGrupo(recibidas,'👔 Visitas de Superiores Recibidas','#1a2a5e')}
+
+  <div class="footer">
+    Politécnico Felipe Soriano Bello · Dinamizador TIC · ${new Date().getFullYear()}
+  </div>
+  </body></html>`;
+
+  const blob = new Blob([docContent], {type:'application/msword'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'Registro_Visitas_TIC_' + hoy() + '.doc';
+  a.click();
+  toast('✅ Archivo Word generado');
 }
 </script>
 </body>
